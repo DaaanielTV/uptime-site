@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Status Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.4/moment.min.js"></script>
+    <style>
+        :root {
+            --bg-primary: #f8f9fa;
+            --bg-secondary: #ffffff;
+            --text-primary: #333333;
+            --text-secondary: #6c757d;
+            --border-color: #dee2e6;
+            --status-online: #28a745;
+            --status-partial: #ffc107;
+            --status-offline: #dc3545;
+            --chart-grid: #e9ecef;
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #212529;
+            --bg-secondary: #343a40;
+            --text-primary: #f8f9fa;
+            --text-secondary: #adb5bd;
+            --border-color: #495057;
+            --chart-grid: #495057;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            transition: background-color 0.3s ease;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .theme-toggle {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .server-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .server-card {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s ease;
+        }
+
+        .server-card:hover {
+            transform: translateY(-3px);
+        }
+
+        .server-card h2 {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            font-size: 18px;
+            font-weight: 500;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .online {
+            background-color: var(--status-online);
+        }
+
+        .partial {
+            background-color: var(--status-partial);
+        }
+
+        .offline {
+            background-color: var(--status-offline);
+        }
+
+        .status-label {
+            font-size: 14px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+
+        .label-online {
+            background-color: rgba(40, 167, 69, 0.1);
+            color: var(--status-online);
+        }
+
+        .label-partial {
+            background-color: rgba(255, 193, 7, 0.1);
+            color: var(--status-partial);
+        }
+
+        .label-offline {
+            background-color: rgba(220, 53, 69, 0.1);
+            color: var(--status-offline);
+        }
+
+        .server-stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            background-color: var(--bg-primary);
+            padding: 12px;
+            border-radius: 6px;
+            text-align: center;
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .last-check {
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-align: center;
+            margin-top: 12px;
+        }
+
+        .chart-container {
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .chart-title {
+            font-size: 18px;
+            font-weight: 500;
+            margin-bottom: 15px;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid var(--border-color);
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        @media (max-width: 768px) {
+            .server-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: var(--bg-secondary);
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .system-status-indicator {
+            display: flex;
+            align-items: center;
+            font-size: 18px;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="title">Server Status Dashboard</div>
+            <button class="theme-toggle" id="themeToggle">🌙 Dark Mode</button>
+        </div>
+
+        <div class="system-status">
+            <div class="system-status-indicator">
+                <span class="status-indicator online" id="overallStatusIndicator"></span>
+                <span id="overallStatusText">All Systems Operational</span>
+            </div>
+        </div>
+
+        <div class="server-grid" id="serverGrid">
+            <!-- Server cards will be added here dynamically -->
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">Uptime History (Last 24 Hours)</div>
+            <canvas id="uptimeChart"></canvas>
+        </div>
+
+        <div class="footer">
+            <p>Last updated: <span id="lastUpdated">--</span> • Next check in <span id="countdownTimer">30</span>s</p>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const servers = [
+            { id: 1, name: "Server Node 1", ip: "89.144.35.68", data: [] },
+            { id: 2, name: "Server Node 2", ip: "89.144.25.144", data: [] },
+            { id: 3, name: "Server Node 3", ip: "89.144.25.137", data: [] }
+        ];
+        const checkInterval = 30; // in seconds
+        const historyPoints = 24; // 24 points for the last 24 hours (1 hour intervals)
+
+        // DOM Elements
+        const serverGrid = document.getElementById('serverGrid');
+        const overallStatusIndicator = document.getElementById('overallStatusIndicator');
+        const overallStatusText = document.getElementById('overallStatusText');
+        const lastUpdated = document.getElementById('lastUpdated');
+        const countdownTimer = document.getElementById('countdownTimer');
+        const themeToggle = document.getElementById('themeToggle');
+
+        // Theme toggle functionality
+        let darkMode = false;
+        themeToggle.addEventListener('click', () => {
+            darkMode = !darkMode;
+            document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+            themeToggle.textContent = darkMode ? '☀️ Light Mode' : '🌙 Dark Mode';
+            updateChart(); // Redraw chart with new theme colors
+        });
+
+        // Initialize server cards
+        function initializeServerCards() {
+            serverGrid.innerHTML = '';
+            servers.forEach(server => {
+                const card = document.createElement('div');
+                card.className = 'server-card';
+                card.id = `server-${server.id}`;
+                card.innerHTML = `
+                    <h2>
+                        <span>${server.name}</span>
+                        <span class="status-label label-offline" id="status-label-${server.id}">Checking...</span>
+                    </h2>
+                    <div>${server.ip}</div>
+                    <div class="server-stats">
+                        <div class="stat-item">
+                            <div class="stat-label">Response Time</div>
+                            <div class="stat-value" id="ping-${server.id}">--</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Uptime</div>
+                            <div class="stat-value" id="uptime-${server.id}">--</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Status</div>
+                            <div class="stat-value" id="status-${server.id}">--</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-label">Last Downtime</div>
+                            <div class="stat-value" id="downtime-${server.id}">--</div>
+                        </div>
+                    </div>
+                    <div class="last-check" id="last-check-${server.id}">Checking status...</div>
+                `;
+                serverGrid.appendChild(card);
+
+                // Initialize server data
+                server.uptime = 100;
+                server.status = 'Offline';
+                server.lastPing = '--';
+                server.lastCheck = new Date();
+                server.lastDowntime = null;
+                
+                // Initialize history data
+                for (let i = 0; i < historyPoints; i++) {
+                    server.data.push({
+                        timestamp: new Date(Date.now() - (i * 60 * 60 * 1000)), // 1 hour intervals
+                        status: Math.random() > 0.1 ? 'Online' : 'Offline',
+                        responseTime: Math.floor(Math.random() * 100) + 20
+                    });
+                }
+                server.data.reverse();
+            });
+        }
+
+        // Initialize Chart.js
+        let uptimeChart;
+        function initializeChart() {
+            const ctx = document.getElementById('uptimeChart').getContext('2d');
+            
+            uptimeChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: servers.map(server => ({
+                        label: server.name,
+                        data: server.data.map(point => ({
+                            x: point.timestamp,
+                            y: point.responseTime
+                        })),
+                        borderColor: getServerColor(server.id),
+                        backgroundColor: getServerColor(server.id, 0.1),
+                        borderWidth: 2,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        pointHoverRadius: 5
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: true,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        x: {
+                            type: 'time',
+                            time: {
+                                unit: 'hour',
+                                displayFormats: {
+                                    hour: 'HH:mm'
+                                }
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            },
+                            ticks: {
+                                color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary')
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Response Time (ms)'
+                            },
+                            grid: {
+                                color: 'rgba(0, 0, 0, 0.05)'
+                            },
+                            ticks: {
+                                color: getComputedStyle(document.documentElement).getPropertyValue('--text-secondary')
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                title: function(tooltipItems) {
+                                    return moment(tooltipItems[0].parsed.x).format('MMM D, YYYY HH:mm');
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Update chart with new data
+        function updateChart() {
+            if (uptimeChart) {
+                // Update colors based on theme
+                uptimeChart.options.scales.x.grid.color = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid');
+                uptimeChart.options.scales.y.grid.color = getComputedStyle(document.documentElement).getPropertyValue('--chart-grid');
+                uptimeChart.options.scales.x.ticks.color = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary');
+                uptimeChart.options.scales.y.ticks.color = getComputedStyle(document.documentElement).getPropertyValue('--text-secondary');
+                
+                // Update datasets
+                servers.forEach((server, index) => {
+                    uptimeChart.data.datasets[index].data = server.data.map(point => ({
+                        x: point.timestamp,
+                        y: point.responseTime
+                    }));
+                    uptimeChart.data.datasets[index].borderColor = getServerColor(server.id);
+                    uptimeChart.data.datasets[index].backgroundColor = getServerColor(server.id, 0.1);
+                });
+                
+                uptimeChart.update();
+            }
+        }
+
+        // Utility function to get color based on server id
+        function getServerColor(id, alpha = 1) {
+            const colors = {
+                1: `rgba(54, 162, 235, ${alpha})`,
+                2: `rgba(75, 192, 192, ${alpha})`,
+                3: `rgba(153, 102, 255, ${alpha})`
+            };
+            return colors[id] || `rgba(201, 203, 207, ${alpha})`;
+        }
+
+        // Check server status
+        function checkServerStatus() {
+            servers.forEach(server => {
+                const statusLabel = document.getElementById(`status-label-${server.id}`);
+                const pingElement = document.getElementById(`ping-${server.id}`);
+                const uptimeElement = document.getElementById(`uptime-${server.id}`);
+                const statusElement = document.getElementById(`status-${server.id}`);
+                const downtimeElement = document.getElementById(`downtime-${server.id}`);
+                const lastCheckElement = document.getElementById(`last-check-${server.id}`);
+                
+                // Simulate a ping check (in a real scenario, you would make an actual request to the server)
+                const isOnline = Math.random() > 0.1; // 90% chance of being online
+                const responseTime = isOnline ? Math.floor(Math.random() * 100) + 20 : 0;
+                
+                // Update server data
+                server.lastCheck = new Date();
+                server.lastPing = isOnline ? `${responseTime} ms` : '--';
+                server.status = isOnline ? 'Online' : 'Offline';
+                
+                // Update uptime calculation
+                if (!isOnline && !server.lastDowntime) {
+                    server.lastDowntime = new Date();
+                }
+                
+                // Calculate uptime percentage (simplified for demo)
+                // In a real implementation, you would track actual uptime history
+                if (!isOnline) {
+                    server.uptime = Math.max(server.uptime - 0.5, 90).toFixed(2);
+                }
+                
+                // Add new data point
+                server.data.push({
+                    timestamp: new Date(),
+                    status: server.status,
+                    responseTime: responseTime
+                });
+                
+                // Keep only last X data points
+                if (server.data.length > historyPoints) {
+                    server.data.shift();
+                }
+                
+                // Update UI
+                statusLabel.className = `status-label label-${isOnline ? 'online' : 'offline'}`;
+                statusLabel.textContent = server.status;
+                pingElement.textContent = server.lastPing;
+                uptimeElement.textContent = `${server.uptime}%`;
+                statusElement.textContent = server.status;
+                downtimeElement.textContent = server.lastDowntime ? moment(server.lastDowntime).format('MM/DD HH:mm') : 'None';
+                lastCheckElement.textContent = `Last checked: ${moment(server.lastCheck).format('HH:mm:ss')}`;
+            });
+            
+            // Update overall system status
+            updateOverallStatus();
+            
+            // Update lastUpdated timestamp
+            lastUpdated.textContent = moment().format('MMM D, YYYY HH:mm:ss');
+            
+            // Update chart
+            updateChart();
+        }
+
+        // Update overall system status
+        function updateOverallStatus() {
+            const offlineServers = servers.filter(server => server.status === 'Offline').length;
+            let statusClass, statusText;
+            
+            if (offlineServers === 0) {
+                statusClass = 'online';
+                statusText = 'All Systems Operational';
+            } else if (offlineServers < servers.length) {
+                statusClass = 'partial';
+                statusText = 'Partial System Outage';
+            } else {
+                statusClass = 'offline';
+                statusText = 'Major System Outage';
+            }
+            
+            overallStatusIndicator.className = `status-indicator ${statusClass}`;
+            overallStatusText.textContent = statusText;
+        }
+
+        // Countdown timer
+        let countdown = checkInterval;
+        function updateCountdown() {
+            countdown--;
+            countdownTimer.textContent = countdown;
+            
+            if (countdown <= 0) {
+                checkServerStatus();
+                countdown = checkInterval;
+            }
+        }
+
+        // Initialize and start
+        function initialize() {
+            initializeServerCards();
+            checkServerStatus();
+            initializeChart();
+            
+            // Set intervals
+            setInterval(updateCountdown, 1000);
+        }
+
+        // Start when DOM is fully loaded
+        document.addEventListener('DOMContentLoaded', initialize);
+    </script>
+</body>
+</html>
